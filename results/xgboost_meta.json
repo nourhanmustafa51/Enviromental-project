@@ -1,0 +1,25 @@
+{
+  "model_name": "xgboost",
+  "display_name": "XGBoost",
+  "training_time_sec": 4.87577710000005,
+  "search_time_sec": 287.8036652999999,
+  "cv_summary": {
+    "r2_mean": 0.6448643184310955,
+    "r2_std": 0.03305034289598603,
+    "rmse_mean": 0.9112224491975773,
+    "rmse_std": 0.046636870298567716,
+    "mae_mean": 0.6092245676408965,
+    "mae_std": 0.028811019066609284
+  },
+  "extra": {
+    "best_params": {
+      "n_estimators": 450,
+      "max_depth": 5,
+      "learning_rate": 0.07124613906967675,
+      "subsample": 0.8987102131109223,
+      "colsample_bytree": 0.9863201554924214,
+      "reg_alpha": 0.8195707470465986,
+      "reg_lambda": 0.056166760102145274
+    }
+  }
+}

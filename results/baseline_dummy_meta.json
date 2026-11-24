@@ -1,0 +1,15 @@
+{
+  "model_name": "baseline_dummy",
+  "display_name": "Baseline (Dummy Mean)",
+  "training_time_sec": 0.1285425999999461,
+  "search_time_sec": 0.0,
+  "cv_summary": {
+    "r2_mean": -0.0005896547925946294,
+    "r2_std": 0.0005621896016017006,
+    "rmse_mean": 1.531288599709025,
+    "rmse_std": 0.03375082671495059,
+    "mae_mean": 1.1980646075102281,
+    "mae_std": 0.03016051206156191
+  },
+  "extra": {}
+}

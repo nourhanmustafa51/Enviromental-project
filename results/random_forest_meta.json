@@ -1,0 +1,23 @@
+{
+  "model_name": "random_forest",
+  "display_name": "Random Forest",
+  "training_time_sec": 6.0923336000000745,
+  "search_time_sec": 164.06701810000004,
+  "cv_summary": {
+    "r2_mean": 0.5778312706068002,
+    "r2_std": 0.02722620314248198,
+    "rmse_mean": 0.9941704843801361,
+    "rmse_std": 0.0399544935496194,
+    "mae_mean": 0.6915675854906471,
+    "mae_std": 0.022471799582253784
+  },
+  "extra": {
+    "best_params": {
+      "model__n_estimators": 500,
+      "model__min_samples_split": 5,
+      "model__min_samples_leaf": 1,
+      "model__max_features": 0.5,
+      "model__max_depth": 25
+    }
+  }
+}

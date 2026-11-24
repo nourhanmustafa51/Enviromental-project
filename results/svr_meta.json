@@ -1,0 +1,22 @@
+{
+  "model_name": "svr",
+  "display_name": "SVR",
+  "training_time_sec": 1.1278336999998828,
+  "search_time_sec": 173.54492800000025,
+  "cv_summary": {
+    "r2_mean": 0.4826137338274424,
+    "r2_std": 0.02850086435905922,
+    "rmse_mean": 1.1005037848466692,
+    "rmse_std": 0.03320425570440424,
+    "mae_mean": 0.7577584846826826,
+    "mae_std": 0.016424847433550778
+  },
+  "extra": {
+    "best_params": {
+      "model__C": 10.0,
+      "model__epsilon": 0.2,
+      "model__gamma": 0.01,
+      "model__kernel": "rbf"
+    }
+  }
+}

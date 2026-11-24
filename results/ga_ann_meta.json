@@ -1,0 +1,22 @@
+{
+  "model_name": "ga_ann",
+  "display_name": "GA-ANN Hybrid",
+  "training_time_sec": 12.125512300000082,
+  "search_time_sec": 173.18268700000044,
+  "cv_summary": {},
+  "extra": {
+    "best_chromosome": {
+      "n_layers": 2,
+      "width": 192,
+      "lr": 0.0003,
+      "dropout": 0.3,
+      "batch_size": 64,
+      "weight_decay": 0.0001
+    },
+    "hidden_dims": [
+      192,
+      96
+    ],
+    "best_epoch": 89
+  }
+}

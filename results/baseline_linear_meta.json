@@ -1,0 +1,15 @@
+{
+  "model_name": "baseline_linear",
+  "display_name": "Linear Regression",
+  "training_time_sec": 0.15305709999984174,
+  "search_time_sec": 0.0,
+  "cv_summary": {
+    "r2_mean": -16.282354348961576,
+    "r2_std": 32.49512289445326,
+    "rmse_mean": 4.052178474878542,
+    "rmse_std": 4.999269346789101,
+    "mae_mean": 1.1475738915156348,
+    "mae_std": 0.2322329966138448
+  },
+  "extra": {}
+}

@@ -1,0 +1,23 @@
+{
+  "model_name": "ann",
+  "display_name": "ANN (PyTorch)",
+  "training_time_sec": 16.817431299999953,
+  "search_time_sec": 68.26200599999993,
+  "cv_summary": {},
+  "extra": {
+    "best_config": {
+      "name": "mlp_128_64_32_lowdrop",
+      "hidden_dims": [
+        128,
+        64,
+        32
+      ],
+      "lr": 0.0005,
+      "dropout": 0.1,
+      "batch_size": 32,
+      "weight_decay": 0.0005
+    },
+    "epochs_run": 90,
+    "best_epoch": 70
+  }
+}
