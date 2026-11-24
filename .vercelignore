@@ -1,0 +1,8 @@
+node_modules
+dist
+data/raw
+models
+notebooks
+docs
+report
+figures
