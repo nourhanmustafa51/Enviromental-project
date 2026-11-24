@@ -4,16 +4,7 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "{data/processed/**,results/**,predictions/**}"
-    }
-  },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    },
     {
       "source": "/((?!api/|assets/|figures/|favicon).*)",
       "destination": "/index.html"

@@ -1,8 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import express from "express";
-import { mlEngine } from "./mlEngine.ts";
-import type { ModelKey, MofFeaturesInput, SplitName } from "../types.ts";
+import { mlEngine } from "./mlEngine";
+import type { ModelKey, MofFeaturesInput, SplitName } from "../types";
 
 const VALID_MODELS = new Set<ModelKey>([
   "xgboost",
@@ -17,9 +15,6 @@ const VALID_MODELS = new Set<ModelKey>([
 export function createApiApp() {
   const app = express();
   app.use(express.json());
-
-  // Serve original repository figures when running via Node/Express
-  app.use("/figures", express.static(path.resolve("figures")));
 
   app.get("/api/overview", (_req, res) => {
     res.json(mlEngine.getOverview());
@@ -72,7 +67,7 @@ export function createApiApp() {
   });
 
   app.post("/api/predict", (req, res) => {
-    const body = req.body as Partial<MofFeaturesInput> & { matchedRowId?: number };
+    const body = (req.body || {}) as Partial<MofFeaturesInput> & { matchedRowId?: number };
     const overview = mlEngine.getOverview();
     const defaults = overview.dataset.featureDefaults;
 
@@ -110,17 +105,22 @@ export function createApiApp() {
     return res.json(result);
   });
 
+  app.get("/api/health", (_req, res) => {
+    return res.json({ ok: true });
+  });
+
   app.get("/api/export/comparison.csv", (_req, res) => {
-    const rootDir = fs.existsSync(path.join(process.cwd(), "results"))
-      ? process.cwd()
-      : path.resolve(import.meta.dirname, "../..");
-    const csvPath = path.join(rootDir, "results", "model_comparison.csv");
-    if (!fs.existsSync(csvPath)) {
-      return res.status(404).json({ error: "Comparison CSV not found" });
-    }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="mof_model_comparison.csv"');
-    return res.send(fs.readFileSync(csvPath, "utf-8"));
+    return res.send(mlEngine.getComparisonCsv());
+  });
+
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    void _next;
+    const message = err instanceof Error ? err.message : "Unexpected API error";
+    if (!res.headersSent) {
+      res.status(500).json({ error: message });
+    }
   });
 
   return app;

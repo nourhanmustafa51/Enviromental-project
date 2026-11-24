@@ -1,6 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { MOF_BUNDLE } from "./mofBundle";
 import type {
   DiagnosticPoint,
   DiagnosticsResponse,
@@ -20,12 +18,7 @@ import type {
   PredictResponse,
   PredictionAttribution,
   SplitName,
-} from "../types.ts";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = fs.existsSync(path.join(process.cwd(), "results"))
-  ? process.cwd()
-  : path.resolve(__dirname, "../..");
+} from "../types";
 
 const MODEL_KEYS: ModelKey[] = [
   "xgboost",
@@ -37,7 +30,6 @@ const MODEL_KEYS: ModelKey[] = [
   "baseline_linear",
 ];
 
-// Weights calibrated from SHAP mean |phi| values on top 16 descriptors
 const FEATURE_WEIGHTS: Record<keyof MofFeaturesInput | "asaGravimetric" | "cageWindowDiff", number> = {
   mcCryChi0: 2.8,
   mcCryChi2: 2.1,
@@ -83,19 +75,6 @@ export function classifyPoreRegime(df: number): PoreRegime {
   if (df <= 5.0) return "Ultra-microporous (3.3–5.0 Å)";
   if (df <= 7.0) return "Microporous (5.0–7.0 Å)";
   return "Large Pore (> 7.0 Å)";
-}
-
-function parseSimpleCsv(filePath: string): { headers: string[]; rows: string[][] } {
-  const raw = fs.readFileSync(filePath, "utf-8").trim();
-  const lines = raw.split(/\r?\n/);
-  const headers = lines[0].split(",");
-  const rows: string[][] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
-    rows.push(line.split(","));
-  }
-  return { headers, rows };
 }
 
 function computeMetrics(yTrue: number[], yPred: number[]) {
@@ -172,12 +151,6 @@ function buildHistogram(values: number[], bins: number, minVal?: number, maxVal?
   });
 }
 
-interface PredEntry {
-  rowId: number;
-  yTrue: number;
-  yPred: number;
-}
-
 type VectorKey = keyof MofFeaturesInput | "asaGravimetric" | "cageWindowDiff";
 
 const VECTOR_KEYS: VectorKey[] = [
@@ -206,7 +179,7 @@ class MofMlEngine {
   private valRecords: MofRecord[] = [];
   private testRecords: MofRecord[] = [];
   private allRecordsById = new Map<number, MofRecord>();
-  private predictions = new Map<string, Map<number, PredEntry>>();
+  private predictions = new Map<string, Map<number, { rowId: number; yTrue: number; yPred: number }>>();
   private modelComparisons: ModelComparisonRow[] = [];
   private gaHistory: GaGenerationRow[] = [];
   private gaBestConfig!: OverviewResponse["gaBestConfig"];
@@ -229,106 +202,96 @@ class MofMlEngine {
     this.loadAll();
   }
 
-  private loadPredictionsFile(modelKey: ModelKey, split: "val" | "test"): Map<number, PredEntry> {
-    const filePath = path.join(ROOT, "predictions", `${modelKey}_${split}_predictions.csv`);
-    const map = new Map<number, PredEntry>();
-    if (!fs.existsSync(filePath)) return map;
-    const { rows } = parseSimpleCsv(filePath);
-    for (const cols of rows) {
-      const rowId = Number(cols[0]);
-      const yTrue = Number(cols[1]);
-      const yPred = Number(cols[2]);
-      map.set(rowId, { rowId, yTrue, yPred });
+  private loadAll() {
+    for (const mk of MODEL_KEYS) {
+      this.predictions.set(`${mk}_val`, new Map());
+      this.predictions.set(`${mk}_test`, new Map());
     }
-    return map;
-  }
 
-  private loadSplitCsv(split: SplitName): MofRecord[] {
-    const filePath = path.join(ROOT, "data", "processed", `${split}.csv`);
-    const { headers, rows } = parseSimpleCsv(filePath);
-    const idx = (name: string) => headers.indexOf(name);
+    const splitNames: SplitName[] = ["train", "val", "test"];
+    for (const raw of MOF_BUNDLE.rows as Array<Array<string | number | null>>) {
+      const rowId = Number(raw[0]);
+      const mofName = String(raw[1]);
+      const split = splitNames[Number(raw[2])];
+      const uptake = Number(raw[3]);
+      const asa = Number(raw[4]);
+      const df = Number(raw[5]);
+      const di = Number(raw[6]);
+      const nasa = Number(raw[7]);
+      const poav = Number(raw[8]);
+      const ponav = Number(raw[9]);
+      const density = Number(raw[10]);
 
-    const iRowId = idx("row_id");
-    const iMofName = idx("MOFname");
-    const iAsa = idx("ASA [m^2/cm^3]");
-    const iDf = idx("Df");
-    const iDi = idx("Di");
-    const iNasa = idx("NASA [m^2/cm^3]");
-    const iPoav = idx("POAV [cm^3/g]");
-    const iPonav = idx("PONAV [cm^3/g]");
-    const iDensity = idx("density [g/cm^3]");
-    const iChi0 = idx("mc_CRY-chi-0-all");
-    const iChi1 = idx("mc_CRY-chi-1-all");
-    const iChi2 = idx("mc_CRY-chi-2-all");
-    const iS0 = idx("mc_CRY-S-0-all");
-    const iS1 = idx("mc_CRY-S-1-all");
-    const iZ0 = idx("mc_CRY-Z-0-all");
-    const iI1 = idx("mc_CRY-I-1-all");
-    const iFLigZ1 = idx("f-lig-Z-1");
-    const iSumLcS0 = idx("sum-lc-S-0-all");
-    const iTarget = idx("CO2 uptake at 0.15 bar and 298K");
-
-    const xgbMap = split === "train" ? undefined : this.predictions.get(`xgboost_${split}`);
-    const rfMap = split === "train" ? undefined : this.predictions.get(`random_forest_${split}`);
-    const annMap = split === "train" ? undefined : this.predictions.get(`ann_${split}`);
-    const gaMap = split === "train" ? undefined : this.predictions.get(`ga_ann_${split}`);
-    const svrMap = split === "train" ? undefined : this.predictions.get(`svr_${split}`);
-
-    const records: MofRecord[] = [];
-    for (const cols of rows) {
-      const rowId = Number(cols[iRowId]);
-      const asa = Number(cols[iAsa]);
-      const df = Number(cols[iDf]);
-      const di = Number(cols[iDi]);
-      const density = Number(cols[iDensity]);
       const rec: MofRecord = {
         rowId,
-        mofName: cols[iMofName],
+        mofName,
         split,
+        uptake,
         asa,
         df,
         di,
-        nasa: Number(cols[iNasa]),
-        poav: Number(cols[iPoav]),
-        ponav: Number(cols[iPonav]),
+        nasa,
+        poav,
+        ponav,
         density,
-        mcCryChi0: Number(cols[iChi0]),
-        mcCryChi1: Number(cols[iChi1]),
-        mcCryChi2: Number(cols[iChi2]),
-        mcCryS0: Number(cols[iS0]),
-        mcCryS1: Number(cols[iS1]),
-        mcCryZ0: Number(cols[iZ0]),
-        mcCryI1: Number(cols[iI1]),
-        fLigZ1: Number(cols[iFLigZ1]),
-        sumLcS0: Number(cols[iSumLcS0]),
-        uptake: Number(cols[iTarget]),
+        mcCryChi0: Number(raw[11]),
+        mcCryChi1: Number(raw[12]),
+        mcCryChi2: Number(raw[13]),
+        mcCryS0: Number(raw[14]),
+        mcCryS1: Number(raw[15]),
+        mcCryZ0: Number(raw[16]),
+        mcCryI1: Number(raw[17]),
+        fLigZ1: Number(raw[18]),
+        sumLcS0: Number(raw[19]),
         asaGravimetric: density > 0 ? asa / density : 0,
         cageWindowDiff: di - df,
         poreRegime: classifyPoreRegime(df),
-        xgbPred: xgbMap?.get(rowId)?.yPred,
-        rfPred: rfMap?.get(rowId)?.yPred,
-        annPred: annMap?.get(rowId)?.yPred,
-        gaAnnPred: gaMap?.get(rowId)?.yPred,
-        svrPred: svrMap?.get(rowId)?.yPred,
       };
-      records.push(rec);
+
+      if (split !== "train") {
+        const xgb = raw[20] !== null ? Number(raw[20]) : undefined;
+        const rf = raw[21] !== null ? Number(raw[21]) : undefined;
+        const ann = raw[22] !== null ? Number(raw[22]) : undefined;
+        const gaAnn = raw[23] !== null ? Number(raw[23]) : undefined;
+        const svr = raw[24] !== null ? Number(raw[24]) : undefined;
+        const dummy = raw[25] !== null ? Number(raw[25]) : undefined;
+        const linear = raw[26] !== null ? Number(raw[26]) : undefined;
+
+        rec.xgbPred = xgb;
+        rec.rfPred = rf;
+        rec.annPred = ann;
+        rec.gaAnnPred = gaAnn;
+        rec.svrPred = svr;
+
+        const predValues: Record<ModelKey, number | undefined> = {
+          xgboost: xgb,
+          random_forest: rf,
+          ann,
+          ga_ann: gaAnn,
+          svr,
+          baseline_dummy: dummy,
+          baseline_linear: linear,
+        };
+
+        for (const mk of MODEL_KEYS) {
+          const val = predValues[mk];
+          if (val !== undefined) {
+            this.predictions.get(`${mk}_${split}`)!.set(rowId, {
+              rowId,
+              yTrue: uptake,
+              yPred: val,
+            });
+          }
+        }
+      }
+
+      if (split === "train") this.trainRecords.push(rec);
+      else if (split === "val") this.valRecords.push(rec);
+      else this.testRecords.push(rec);
+
       this.allRecordsById.set(rowId, rec);
     }
-    return records;
-  }
 
-  private loadAll() {
-    for (const modelKey of MODEL_KEYS) {
-      this.predictions.set(`${modelKey}_val`, this.loadPredictionsFile(modelKey, "val"));
-      this.predictions.set(`${modelKey}_test`, this.loadPredictionsFile(modelKey, "test"));
-    }
-
-    this.trainRecords = this.loadSplitCsv("train");
-    this.valRecords = this.loadSplitCsv("val");
-    this.testRecords = this.loadSplitCsv("test");
-
-    // Load model comparison & metadata
-    const compCsv = parseSimpleCsv(path.join(ROOT, "results", "model_comparison.csv"));
     const metaByDisplayName = new Map<
       string,
       {
@@ -339,28 +302,44 @@ class MofMlEngine {
       }
     >();
 
-    for (const mk of MODEL_KEYS) {
-      const metaPath = path.join(ROOT, "results", `${mk}_meta.json`);
-      if (fs.existsSync(metaPath)) {
-        const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
-        const cv = meta.cv_summary || {};
-        metaByDisplayName.set(meta.display_name, {
-          modelKey: mk,
-          searchTimeSec: Number(meta.search_time_sec || 0),
-          cvSummary: {
-            r2Mean: cv.r2_mean,
-            r2Std: cv.r2_std,
-            rmseMean: cv.rmse_mean,
-            rmseStd: cv.rmse_std,
-            maeMean: cv.mae_mean,
-            maeStd: cv.mae_std,
-          },
-          bestParams: meta.extra?.best_params || meta.extra?.best_config || meta.extra?.best_chromosome || {},
-        });
+    const metas = MOF_BUNDLE.metas as Record<
+      string,
+      {
+        display_name: string;
+        search_time_sec?: number;
+        cv_summary?: Record<string, number>;
+        extra?: {
+          best_params?: Record<string, unknown>;
+          best_config?: Record<string, unknown>;
+          best_chromosome?: Record<string, unknown>;
+        };
       }
+    >;
+
+    for (const mk of MODEL_KEYS) {
+      const meta = metas[mk];
+      if (!meta) continue;
+      const cv = meta.cv_summary || {};
+      metaByDisplayName.set(meta.display_name, {
+        modelKey: mk,
+        searchTimeSec: Number(meta.search_time_sec || 0),
+        cvSummary: {
+          r2Mean: cv.r2_mean,
+          r2Std: cv.r2_std,
+          rmseMean: cv.rmse_mean,
+          rmseStd: cv.rmse_std,
+          maeMean: cv.mae_mean,
+          maeStd: cv.mae_std,
+        },
+        bestParams:
+          meta.extra?.best_params ||
+          meta.extra?.best_config ||
+          meta.extra?.best_chromosome ||
+          {},
+      });
     }
 
-    this.modelComparisons = compCsv.rows.map((cols) => {
+    this.modelComparisons = (MOF_BUNDLE.compRows as string[][]).map((cols) => {
       const model = cols[0];
       const meta = metaByDisplayName.get(model);
       return {
@@ -379,40 +358,35 @@ class MofMlEngine {
       };
     });
 
-    // Load GA history & best config
-    const gaCsv = parseSimpleCsv(path.join(ROOT, "results", "ga_history.csv"));
-    this.gaHistory = gaCsv.rows.map((cols) => ({
-      generation: Number(cols[0]),
-      bestFitnessValRmse: Number(cols[1]),
-      meanFitnessValRmse: Number(cols[2]),
-      bestSoFarValRmse: Number(cols[3]),
+    this.gaHistory = (MOF_BUNDLE.gaHistory as number[][]).map((cols) => ({
+      generation: cols[0],
+      bestFitnessValRmse: cols[1],
+      meanFitnessValRmse: cols[2],
+      bestSoFarValRmse: cols[3],
     }));
-    this.gaBestConfig = JSON.parse(
-      fs.readFileSync(path.join(ROOT, "results", "ga_best_ann_config.json"), "utf-8")
-    );
 
-    // Load feature importances
-    const parseImportance = (filename: string, limit = 25): FeatureImportanceItem[] => {
-      const { rows } = parseSimpleCsv(path.join(ROOT, "results", filename));
-      return rows.slice(0, limit).map((c) => ({
-        feature: c[0],
-        importance: Number(c[1]),
-      }));
-    };
-    this.shapTop = parseImportance("shap_feature_importance.csv", 25);
-    this.xgbTop = parseImportance("xgb_feature_importance.csv", 25);
-    this.rfTop = parseImportance("rf_feature_importance.csv", 25);
+    this.gaBestConfig = MOF_BUNDLE.gaBestConfig as OverviewResponse["gaBestConfig"];
 
-    // Fit StandardScaler strictly on train.csv
+    this.shapTop = (MOF_BUNDLE.shapTop as Array<[string, number]>).map(([feature, importance]) => ({
+      feature,
+      importance,
+    }));
+    this.xgbTop = (MOF_BUNDLE.xgbTop as Array<[string, number]>).map(([feature, importance]) => ({
+      feature,
+      importance,
+    }));
+    this.rfTop = (MOF_BUNDLE.rfTop as Array<[string, number]>).map(([feature, importance]) => ({
+      feature,
+      importance,
+    }));
+
     const statsObj = {} as Record<VectorKey, { mean: number; std: number; min: number; max: number }>;
     for (const key of VECTOR_KEYS) {
-      const vals = this.trainRecords.map((r) => r[key]);
-      statsObj[key] = meanAndStd(vals);
+      statsObj[key] = meanAndStd(this.trainRecords.map((r) => r[key]));
     }
     this.trainStats = statsObj;
     this.trainMeanUptake = meanAndStd(this.trainRecords.map((r) => r.uptake)).mean;
 
-    // Precompute weighted standardized vectors for train.csv
     this.trainVectors = this.trainRecords.map((r) =>
       VECTOR_KEYS.map((k) => {
         const { mean, std } = this.trainStats[k];
@@ -420,7 +394,6 @@ class MofMlEngine {
       })
     );
 
-    // Evaluate TypeScript RBF-Kernel k-NN surrogate on val & test splits
     const valPreds = this.valRecords.map((r) => this.predictRaw(r).predictedUptake);
     const valM = computeMetrics(
       this.valRecords.map((r) => r.uptake),
@@ -439,6 +412,10 @@ class MofMlEngine {
       testRmse: Number(testM.rmse.toFixed(4)),
       testMae: Number(testM.mae.toFixed(4)),
     };
+  }
+
+  getComparisonCsv(): string {
+    return MOF_BUNDLE.compCsvText;
   }
 
   private predictRaw(input: MofFeaturesInput): {
@@ -482,14 +459,16 @@ class MofMlEngine {
     }
     topK.sort((a, b) => a.distSq - b.distSq);
 
-    // Distance-weighted Gaussian kernel over top-K standardized analogs
     const bandwidth = Math.max(1.8, Math.sqrt(topK[Math.min(5, topK.length - 1)].distSq) * 1.15);
     const inv2Sigma2 = 1 / (2 * bandwidth * bandwidth);
 
     let sumW = 0;
     let sumWY = 0;
     const neighbors = topK.map((item) => {
-      const w = item.distSq < 1e-9 ? 100.0 : Math.exp(-item.distSq * inv2Sigma2) / (1 + Math.sqrt(item.distSq) * 0.25);
+      const w =
+        item.distSq < 1e-9
+          ? 100.0
+          : Math.exp(-item.distSq * inv2Sigma2) / (1 + Math.sqrt(item.distSq) * 0.25);
       const rec = this.trainRecords[item.idx];
       sumW += w;
       sumWY += w * rec.uptake;
@@ -499,7 +478,8 @@ class MofMlEngine {
     const predictedUptake = sumW > 0 ? sumWY / sumW : this.trainMeanUptake;
     const neighborUptakes = neighbors.map((n) => n.rec.uptake).sort((a, b) => a - b);
     const lowerBound = neighborUptakes[Math.max(0, Math.floor(neighborUptakes.length * 0.15))];
-    const upperBound = neighborUptakes[Math.min(neighborUptakes.length - 1, Math.floor(neighborUptakes.length * 0.85))];
+    const upperBound =
+      neighborUptakes[Math.min(neighborUptakes.length - 1, Math.floor(neighborUptakes.length * 0.85))];
 
     return { predictedUptake, lowerBound, upperBound, neighbors };
   }
@@ -510,7 +490,6 @@ class MofMlEngine {
     const cageWindowDiff = input.di - input.df;
     const poreRegime = classifyPoreRegime(input.df);
 
-    // Compute local sensitivity attributions by resetting each input feature to train mean
     const baseInput: MofFeaturesInput = {
       asa: this.trainStats.asa.mean,
       df: this.trainStats.df.mean,
@@ -530,7 +509,9 @@ class MofMlEngine {
       sumLcS0: this.trainStats.sumLcS0.mean,
     };
 
-    const attributions: PredictionAttribution[] = (Object.keys(FEATURE_LABELS) as Array<keyof MofFeaturesInput>)
+    const attributions: PredictionAttribution[] = (
+      Object.keys(FEATURE_LABELS) as Array<keyof MofFeaturesInput>
+    )
       .map((key) => {
         const perturbed = { ...input, [key]: baseInput[key] };
         const withoutFeature = this.predictRaw(perturbed).predictedUptake;
@@ -738,7 +719,9 @@ class MofMlEngine {
 
   getDiagnostics(modelKey: ModelKey, split: "val" | "test"): DiagnosticsResponse {
     const records = split === "val" ? this.valRecords : this.testRecords;
-    const predMap = this.predictions.get(`${modelKey}_${split}`) ?? new Map<number, PredEntry>();
+    const predMap =
+      this.predictions.get(`${modelKey}_${split}`) ??
+      new Map<number, { rowId: number; yTrue: number; yPred: number }>();
     const modelInfo = this.modelComparisons.find((m) => m.modelKey === modelKey);
 
     const points: DiagnosticPoint[] = [];
@@ -786,7 +769,6 @@ class MofMlEngine {
   }
 
   getExplainability(): ExplainabilityResponse {
-    // Deterministic stride sample of 600 training MOFs for smooth interactive scatter plots
     const scatterSamples: ExplainabilityResponse["scatterSamples"] = [];
     const step = Math.max(1, Math.floor(this.trainRecords.length / 600));
     for (let i = 0; i < this.trainRecords.length; i += step) {

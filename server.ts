@@ -1,9 +1,10 @@
 import path from "node:path";
 import express from "express";
-import { createApiApp } from "./src/server/app.ts";
+import { createApiApp } from "./src/server/app";
 
 async function startServer() {
   const app = createApiApp();
+  app.use("/figures", express.static(path.resolve("figures")));
 
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
