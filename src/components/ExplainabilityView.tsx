@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { fetchExplainability } from "../lib/apiClient.ts";
 import type { ExplainabilityResponse, OverviewResponse, PoreRegime } from "../types.ts";
 
 interface ExplainabilityViewProps {
@@ -77,9 +78,7 @@ export function ExplainabilityView({ overview }: ExplainabilityViewProps) {
   >(null);
 
   useEffect(() => {
-    fetch("/api/explainability")
-      .then((res) => res.json())
-      .then((d: ExplainabilityResponse) => setData(d));
+    fetchExplainability().then((d: ExplainabilityResponse) => setData(d));
   }, []);
 
   const activeImportances = useMemo(() => {

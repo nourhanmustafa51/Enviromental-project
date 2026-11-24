@@ -4,6 +4,7 @@ import { BenchmarksView } from "./components/BenchmarksView.tsx";
 import { PredictorView } from "./components/PredictorView.tsx";
 import { ExplainabilityView } from "./components/ExplainabilityView.tsx";
 import { ExplorerView } from "./components/ExplorerView.tsx";
+import { fetchOverview } from "./lib/apiClient.ts";
 import type { MofRecord, OverviewResponse } from "./types.ts";
 
 export default function App() {
@@ -13,11 +14,7 @@ export default function App() {
   const [predictorSeedMof, setPredictorSeedMof] = useState<MofRecord | null>(null);
 
   useEffect(() => {
-    fetch("/api/overview")
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to load workspace data (${res.status})`);
-        return res.json();
-      })
+    fetchOverview()
       .then((data: OverviewResponse) => setOverview(data))
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to initialize application");

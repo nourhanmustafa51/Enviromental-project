@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RotateCcw, Sparkles } from "lucide-react";
+import { fetchMofById, postPredict } from "../lib/apiClient.ts";
 import type { MofFeaturesInput, MofRecord, OverviewResponse, PredictResponse } from "../types.ts";
 
 interface PredictorViewProps {
@@ -88,12 +89,7 @@ export function PredictorView({ overview, initialMof, onClearInitialMof }: Predi
   const runPredict = useCallback(async (payload: MofFeaturesInput, rowId?: number) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/predict", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, matchedRowId: rowId }),
-      });
-      const data: PredictResponse = await res.json();
+      const data = await postPredict(payload, rowId);
       setResult(data);
     } finally {
       setLoading(false);
@@ -103,15 +99,9 @@ export function PredictorView({ overview, initialMof, onClearInitialMof }: Predi
   useEffect(() => {
     let cancelled = false;
     const payload = initialMof ? mofToInput(initialMof) : overview.dataset.featureDefaults;
-    fetch("/api/predict", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, matchedRowId: initialMof?.rowId }),
-    })
-      .then((res) => res.json())
-      .then((data: PredictResponse) => {
-        if (!cancelled) setResult(data);
-      });
+    postPredict(payload, initialMof?.rowId).then((data: PredictResponse) => {
+      if (!cancelled) setResult(data);
+    });
     return () => {
       cancelled = true;
     };
@@ -509,9 +499,8 @@ export function PredictorView({ overview, initialMof, onClearInitialMof }: Predi
                     <tr
                       key={analog.rowId}
                       onClick={async () => {
-                        const res = await fetch(`/api/mofs/${analog.rowId}`);
-                        if (res.ok) {
-                          const full: MofRecord = await res.json();
+                        const full = await fetchMofById(analog.rowId);
+                        if (full) {
                           const next = mofToInput(full);
                           setForm(next);
                           setMatchedRowId(full.rowId);

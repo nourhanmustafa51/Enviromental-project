@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from "lucide-react";
+import { fetchMofs } from "../lib/apiClient.ts";
 import type { MofListResponse, MofRecord, PoreRegime, SplitName } from "../types.ts";
 
 interface ExplorerViewProps {
@@ -37,21 +38,26 @@ export function ExplorerView({ onSendToPredictor }: ExplorerViewProps) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/mofs?${currentQuery}`)
-      .then((res) => res.json())
-      .then((d: MofListResponse) => {
-        if (!cancelled) {
-          setData(d);
-          setLoadedQuery(currentQuery);
-          if (d.items.length > 0) {
-            setSelectedMof((prev) => prev ?? d.items[0]);
-          }
+    fetchMofs({
+      split,
+      regime,
+      search,
+      sort,
+      page,
+      limit: 20,
+    }).then((d: MofListResponse) => {
+      if (!cancelled) {
+        setData(d);
+        setLoadedQuery(currentQuery);
+        if (d.items.length > 0) {
+          setSelectedMof((prev) => prev ?? d.items[0]);
         }
-      });
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [currentQuery]);
+  }, [currentQuery, split, regime, search, sort, page]);
 
   return (
     <div className="space-y-6">

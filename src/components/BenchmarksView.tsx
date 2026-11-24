@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowUpDown, Image as ImageIcon } from "lucide-react";
+import { fetchDiagnostics } from "../lib/apiClient.ts";
 import type {
   DiagnosticPoint,
   DiagnosticsResponse,
@@ -45,8 +46,7 @@ export function BenchmarksView({ overview, onGoToPredictor }: BenchmarksViewProp
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/diagnostics?model=${selectedModel}&split=${split}`)
-      .then((res) => res.json())
+    fetchDiagnostics(selectedModel, split)
       .then((data: DiagnosticsResponse) => {
         if (!cancelled) {
           setDiagnostics(data);

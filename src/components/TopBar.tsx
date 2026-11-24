@@ -1,3 +1,5 @@
+import { downloadComparisonCsv } from "../lib/apiClient.ts";
+
 export type NavTab = "benchmarks" | "predictor" | "explainability" | "explorer";
 
 interface TopBarProps {
@@ -45,13 +47,15 @@ export function TopBar({ activeTab, onSelectTab }: TopBarProps) {
         </nav>
 
         <div className="flex items-center shrink-0">
-          <a
-            href="/api/export/comparison.csv"
-            download="mof_model_comparison.csv"
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-teal-400 hover:bg-teal-300 rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400"
+          <button
+            type="button"
+            onClick={() => {
+              void downloadComparisonCsv();
+            }}
+            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-teal-400 hover:bg-teal-300 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400"
           >
             Download CSV
-          </a>
+          </button>
         </div>
       </div>
     </header>

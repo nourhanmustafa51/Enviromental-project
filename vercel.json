@@ -6,6 +6,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/index.mjs?__route=$1"
+    },
+    {
       "source": "/((?!api/|assets/|figures/|favicon).*)",
       "destination": "/index.html"
     }
