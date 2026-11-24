@@ -1,0 +1,5 @@
+{
+  "name": "MOF CO₂ Uptake Studio",
+  "description": "Interactive machine learning workbench for predicting CO₂ adsorption capacity of Metal-Organic Frameworks (MOFs) at 0.15 bar and 298 K, featuring model benchmarks, parity diagnostics, SHAP explainability, and live structure-property screening.",
+  "requestFramePermissions": []
+}
